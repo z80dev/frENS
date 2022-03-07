@@ -17,11 +17,18 @@ contract AllFrensRegistrar is ERC721 {
     address ens = 0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e;
     address publicResolver = 0x4B1488B7a6B320d2D721406204aBc3eeAa9AD329;
     uint256 FEE = 0.05 ether;
-    mapping(bytes32 => mapping(address => bool)) public collectionEnabledForRootNode;
+
+    /* Access Control */
+    // support multiple subdomains for a collection
+    mapping(bytes32 => bool) public subdomainEnabledForCollection; // key is hash(subdomain, collection)
+    mapping(bytes32 => bytes32) public subdomainForNFT; // key is hash(subdomain, collection, tokenID)
     mapping(address => mapping(uint256 => bytes32)) public nodehashForNFT;
+
+    /* Track Subdomain Information */
     mapping(uint256 => bytes32) labelForId;
     mapping(uint256 => bytes32) rootNodeForId;
     mapping(bytes32 => address) originalRegistrant; // only let one address register a subdomain, prevent impersonation
+
     bool public enabled = false;
 
     modifier hodler(address collection, uint256 id) {
@@ -38,13 +45,24 @@ contract AllFrensRegistrar is ERC721 {
         registrarController = newController;
     }
 
-    constructor() ERC721("allfrENS", "frENS") {
+    constructor() ERC721("frENS", "frENS") {
         registrarController = msg.sender;
+    }
+
+    function setSubdomainCollectionAuth(bytes32 rootnode, address collection, bool auth) external {
+        require(IENS(ens).owner(rootnode) == msg.sender, "Not domain owner");
+        bytes32 key = keccak256(abi.encode(rootnode, collection));
+        subdomainEnabledForCollection[key] = auth;
+    }
+
+    function isSubdomainEnabledForCollection(bytes32 rootnode, address collection) internal view returns (bool) {
+        bytes32 key = keccak256(abi.encode(rootnode, collection));
+        return subdomainEnabledForCollection[key];
     }
 
     function transferFrom(address from, address to, uint256 id) public override {
         super.transferFrom(from, to, id);
-        // take temporary ownership in order to set resolver addr
+        // take temporary ownership in order to set addr w/ resolver
         IENS(ens).setSubnodeOwner(rootNodeForId[id], labelForId[id], address(this));
         IResolver(publicResolver).setAddr(bytes32(id), to);
         IENS(ens).setSubnodeOwner(rootNodeForId[id], labelForId[id], to);
@@ -56,10 +74,6 @@ contract AllFrensRegistrar is ERC721 {
         IENS(ens).setSubnodeOwner(rootNodeForId[id], labelForId[id], address(this));
         IResolver(publicResolver).setAddr(bytes32(id), to);
         IENS(ens).setSubnodeOwner(rootNodeForId[id], labelForId[id], to);
-    }
-
-    function setRootNodeForCollection(address collection, bytes32 rootNode) controllerOnly external {
-        collectionEnabledForRootNode[rootNode][collection] = true;
     }
 
     function setEnabled(bool _enabled) controllerOnly external {
@@ -84,18 +98,17 @@ contract AllFrensRegistrar is ERC721 {
     function register(bytes32 label, bytes32 rootNode, address collection, uint256 id) payable public hodler(collection, id) {
         require(enabled, "DISABLED");
 
-        // delete current record if it exists
-        bytes32 currentNode = nodehashForNFT[collection][id];
+        // check if NFT has a subdomain registered already
+        bytes32 subdomainKey = keccak256(abi.encode(rootNode, collection, id));
+        bytes32 currentNode = subdomainForNFT[subdomainKey];
         if (currentNode != bytes32(0)) {
+            // delete current record if it exists
             IENS(ens).setSubnodeRecord(rootNodeForId[uint256(currentNode)], labelForId[uint256(currentNode)], address(0), address(0), 0);
             // burn existing NFT
             _burn(uint256(currentNode));
         }
 
-        // get rootNode that was set up for collection
-        // bytes32 rootNode = rootNodeForCollection[collection];
-        require(collectionEnabledForRootNode[rootNode][collection], "NFT NOT AUTH");
-
+        require(isSubdomainEnabledForCollection(rootNode, collection), "Subdomain AUTH");
 
         // calculate nodehash
         bytes32 nodehash = keccak256(abi.encodePacked(rootNode, label));
@@ -109,7 +122,7 @@ contract AllFrensRegistrar is ERC721 {
         chargeFee();
 
         // store state (maybe should be a struct?)
-        nodehashForNFT[collection][id] = nodehash;
+        subdomainForNFT[subdomainKey] = nodehash;
         labelForId[uint256(nodehash)] = label;
         rootNodeForId[uint256(nodehash)] = rootNode;
 
