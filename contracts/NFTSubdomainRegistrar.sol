@@ -10,7 +10,7 @@ import "./ERC721.sol";
 /**
  * A registrar that allocates subdomains reserved subdomains to authorized NFT holders
  */
-contract AllFrensRegistrar is ERC721 {
+contract NFTSubdomainRegistrar is ERC721 {
     /* STORAGE */
     address registrarController; // can set fee
     address feeRecipient; // receives platform fee
