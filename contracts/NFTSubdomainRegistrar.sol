@@ -15,14 +15,13 @@ contract NFTSubdomainRegistrar is ERC721 {
     address registrarController; // can set fee
     address feeRecipient; // receives platform fee
     address ens = 0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e;
-    address publicResolver = 0x4B1488B7a6B320d2D721406204aBc3eeAa9AD329;
+    address publicResolver;
     uint256 FEE = 0.05 ether;
 
     /* Access Control */
     // support multiple subdomains for a collection
-    mapping(bytes32 => bool) public subdomainEnabledForCollection; // key is hash(subdomain, collection)
-    mapping(bytes32 => bytes32) public subdomainForNFT; // key is hash(subdomain, collection, tokenID)
-    mapping(bytes32 => mapping(address => mapping(uint256 => bytes32))) public nodehashForNFT;
+    mapping(bytes32 => mapping(address => bool)) public subdomainEnabledForCollection;
+    mapping(bytes32 => mapping(address => mapping(uint256 => bytes32))) public subdomainForNFT;
 
     /* Track Subdomain Information */
     mapping(uint256 => bytes32) labelForId;
@@ -31,8 +30,9 @@ contract NFTSubdomainRegistrar is ERC721 {
 
     bool public enabled = false;
 
-    constructor() ERC721("frENS", "frENS") {
+    constructor(address _resolver) ERC721("frENS", "frENS") {
         registrarController = msg.sender;
+        publicResolver = _resolver;
     }
 
     modifier hodler(address collection, uint256 id) {
@@ -60,13 +60,11 @@ contract NFTSubdomainRegistrar is ERC721 {
 
     function setSubdomainCollectionAuth(bytes32 rootnode, address collection, bool auth) external {
         require(IENS(ens).owner(rootnode) == msg.sender, "Not domain owner");
-        bytes32 key = keccak256(abi.encode(rootnode, collection));
-        subdomainEnabledForCollection[key] = auth;
+        subdomainEnabledForCollection[rootnode][collection] = auth;
     }
 
     function isSubdomainEnabledForCollection(bytes32 rootnode, address collection) internal view returns (bool) {
-        bytes32 key = keccak256(abi.encode(rootnode, collection));
-        return subdomainEnabledForCollection[key];
+        return subdomainEnabledForCollection[rootnode][collection];
     }
 
     function transferFrom(address from, address to, uint256 id) public override {
@@ -96,13 +94,12 @@ contract NFTSubdomainRegistrar is ERC721 {
     /**
      * Register a name, or reclaim an existing registration.
      */
-    function register(bytes32 label, bytes32 rootNode, address collection, uint256 id) payable public hodler(collection, id) chargeFee() {
+    function register(bytes32 label, bytes32 rootNode, address collection, uint256 id) payable public hodler(collection, id) chargeFee {
         require(enabled, "DISABLED");
         require(isSubdomainEnabledForCollection(rootNode, collection), "Subdomain AUTH");
 
         // check if NFT has a subdomain registered already
-        bytes32 subdomainKey = keccak256(abi.encode(rootNode, collection, id));
-        bytes32 currentNode = subdomainForNFT[subdomainKey];
+        bytes32 currentNode = subdomainForNFT[rootNode][collection][id];
         if (currentNode != bytes32(0)) {
             // delete current record if it exists
             IENS(ens).setSubnodeRecord(rootNodeForId[uint256(currentNode)], labelForId[uint256(currentNode)], address(0), address(0), 0);
@@ -120,7 +117,7 @@ contract NFTSubdomainRegistrar is ERC721 {
         require(originalRegistrant[nodehash] == address(0) || originalRegistrant[nodehash] == msg.sender);
 
         // store state (maybe should be a struct?)
-        subdomainForNFT[subdomainKey] = nodehash;
+        subdomainForNFT[rootNode][collection][id] = nodehash;
         originalRegistrant[nodehash] = msg.sender;
 
         // for each subdomain we issue, we want to record its label and rootNode
