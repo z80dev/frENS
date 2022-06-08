@@ -63,10 +63,6 @@ contract NFTSubdomainRegistrar is ERC721 {
         subdomainEnabledForCollection[rootnode][collection] = auth;
     }
 
-    function isSubdomainEnabledForCollection(bytes32 rootnode, address collection) internal view returns (bool) {
-        return subdomainEnabledForCollection[rootnode][collection];
-    }
-
     function transferFrom(address from, address to, uint256 id) public override {
         super.transferFrom(from, to, id);
         // take temporary ownership in order to set addr w/ resolver
@@ -96,13 +92,17 @@ contract NFTSubdomainRegistrar is ERC721 {
      */
     function register(bytes32 label, bytes32 rootNode, address collection, uint256 id) payable public hodler(collection, id) chargeFee {
         require(enabled, "DISABLED");
-        require(isSubdomainEnabledForCollection(rootNode, collection), "Subdomain AUTH");
+        require(subdomainEnabledForCollection[rootNode][collection], "Subdomain AUTH");
 
         // check if NFT has a subdomain registered already
         bytes32 currentNode = subdomainForNFT[rootNode][collection][id];
         if (currentNode != bytes32(0)) {
             // delete current record if it exists
-            IENS(ens).setSubnodeRecord(rootNodeForId[uint256(currentNode)], labelForId[uint256(currentNode)], address(0), address(0), 0);
+            IENS(ens).setSubnodeRecord(rootNodeForId[uint256(currentNode)],
+                                       labelForId[uint256(currentNode)],
+                                       address(0),
+                                       address(0),
+                                       0);
             // burn existing NFT
             _burn(uint256(currentNode));
         }

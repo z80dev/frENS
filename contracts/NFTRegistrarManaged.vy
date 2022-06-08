@@ -58,6 +58,12 @@ def setSubdomainCollectionAuth(rootNode: bytes32, collection: address, auth: boo
     self.subdomainEnabledForCollection[rootNode][collection] = auth
 
 @external
+def setText(node: bytes32, collection: address, id: uint256, k: String[100], v: String[100]):
+    assert self.enabled, "disabled"
+    assert ERC721(collection).ownerOf(id) == msg.sender, "not hodler"
+    IResolver(PUBLIC_RESOLVER).setText(node, k, v)
+
+@external
 def register(label: bytes32, rootNode: bytes32, collection: address, id: uint256):
     assert self.enabled, "disabled"
     assert self.subdomainEnabledForCollection[rootNode][collection], "subdomain auth"
@@ -84,4 +90,4 @@ def register(label: bytes32, rootNode: bytes32, collection: address, id: uint256
     # ENS.setSubnodeRecord(rootNode, label, self, convert(PUBLIC_RESOLVER, address), 5)
     ENS.setSubnodeRecord(rootNode, label, self, PUBLIC_RESOLVER, 5)
     IResolver(PUBLIC_RESOLVER).setAddr(nodehash, msg.sender)
-    ENS.setSubnodeOwner(rootNode, label, msg.sender)
+    # ENS.setSubnodeOwner(rootNode, label, msg.sender)
