@@ -57,11 +57,16 @@ def setSubdomainCollectionAuth(rootNode: bytes32, collection: address, auth: boo
     assert self == ENS.owner(rootNode), "not domain owner"
     self.subdomainEnabledForCollection[rootNode][collection] = auth
 
+@payable
 @external
 def register(label: bytes32, rootNode: bytes32, collection: address, id: uint256):
     assert self.enabled, "disabled"
     assert self.subdomainEnabledForCollection[rootNode][collection], "subdomain auth"
     assert ERC721(collection).ownerOf(id) == msg.sender, "not hodler"
+    assert msg.value >= self.fee
+    send(self.feeRecipient, self.fee)
+    if msg.value > self.fee:
+        send(msg.sender, msg.value - self.fee)
 
     currentNode: bytes32 = self.subdomainForNFT[rootNode][collection][id]
     if currentNode != EMPTY_BYTES32:

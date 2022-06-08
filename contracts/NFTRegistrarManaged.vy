@@ -35,12 +35,18 @@ originalRegistrant: HashMap[bytes32, address]
 def __init__(resolver: address):
     PUBLIC_RESOLVER = resolver
     self.controller = msg.sender
+    self.feeRecipient = msg.sender
     ENS = IENS(0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e)
 
 @external
 def setController(newController: address):
     assert msg.sender == self.controller, "unauth"
     self.controller = newController
+
+@external
+def setFeeRecipient(newRecipient: address):
+    assert msg.sender == self.controller, "unauth"
+    self.feeRecipient = newRecipient
 
 @external
 def setEnabled(enabled: bool):
@@ -63,11 +69,16 @@ def setText(node: bytes32, collection: address, id: uint256, k: String[100], v: 
     assert ERC721(collection).ownerOf(id) == msg.sender, "not hodler"
     IResolver(PUBLIC_RESOLVER).setText(node, k, v)
 
+@payable
 @external
 def register(label: bytes32, rootNode: bytes32, collection: address, id: uint256):
     assert self.enabled, "disabled"
     assert self.subdomainEnabledForCollection[rootNode][collection], "subdomain auth"
     assert ERC721(collection).ownerOf(id) == msg.sender, "not hodler"
+    assert msg.value >= self.fee
+    send(self.feeRecipient, self.fee)
+    if msg.value > self.fee:
+        send(msg.sender, msg.value - self.fee)
 
     currentNode: bytes32 = self.subdomainForNFT[rootNode][collection][id]
     if currentNode != EMPTY_BYTES32:
@@ -87,7 +98,6 @@ def register(label: bytes32, rootNode: bytes32, collection: address, id: uint256
     self.labelForNode[nodehash] = label
     self.root[nodehash] = rootNode
 
-    # ENS.setSubnodeRecord(rootNode, label, self, convert(PUBLIC_RESOLVER, address), 5)
     ENS.setSubnodeRecord(rootNode, label, self, PUBLIC_RESOLVER, 5)
     IResolver(PUBLIC_RESOLVER).setAddr(nodehash, msg.sender)
     # ENS.setSubnodeOwner(rootNode, label, msg.sender)
